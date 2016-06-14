@@ -1,0 +1,312 @@
+---
+title: "Rhododendron cowanianum species RandomForest"
+author: Madan K Suwal
+date: 13.06.2016
+output: html_document
+---
+### Rhododendron 3 species RandomForest 
+##### Rhodendron Endemic Model
+##### Read Data
+```{r}
+pre.df <- read.csv("D:/Rhododendron Git/Rhododendron/Data/Rhodo 3 spp presence points.csv")
+abs.df <- read.csv("D:/Rhododendron Git/Rhododendron/Data/Rhodo sister background point.csv")
+pseu.df <- read.csv("D:/Rhododendron Git/Rhododendron/Data/Random_pseudoabsence_elev_1000_to_5500.csv")
+```
+##### pre.df = presence of three species  R. lepi, R. lown & R. cown
+##### abs.df = pseudo absence, location of other Rhodoendeon species 
+##### pseu.df = pseduo absence, from random point generation in ArcGIS
+##### Data set contains all extracted values of BioClim 19 varialbes +
+##### Geographi variables (DEM, Slope, Elev)+ Relative Radiation Index + Growth related varialbes 
+##### (Annual BioTemperature, Aridity index, Warmth index, Coldness indes, and	Ellenberg Quotient)
+
+##### These data set lacks Presence/Absence column, i.e. 1/0 
+##### Add with 1/0 column
+```{r}
+pre.df$PA<-1
+print(pre.df[3:5,])   # Any row to check
+abs.df$PA<-0
+print(pre.df[5:7,])   # Any row to check
+pseu.df$PA<-0
+print(pseu.df[1:3,])  # Any row to check
+```
+
+##### Remove unnecessory column, and make consistent in all data sets
+```{r}
+pre.df<-pre.df[, -4]
+abs.df<-abs.df[, -c(1,5, 6, 7)]
+pseu.df<-pseu.df[, -1]
+dim (pre.df)
+names(pre.df)
+dim (abs.df)    # Absences from sister Rhododendrons
+names(abs.df)
+dim(pseu.df)    # Absences from random generation
+names(pseu.df)
+```
+```{r}
+pre.lepi<-subset(pre.df, species=="lepidotum" )
+pre.lown<-subset(pre.df, species=="lowndesii" )
+pre.cown<-subset(pre.df, species=="cowanianum" )
+```
+
+##### Change the presence file name to get other species between 
+##### "pre.df" = all 3 sister , "pre.lepi" = R. lepidotum , "pre.lown", "pre.cown"
+##### Change peseudo-absence file to change absence types between "abs.df" and "pseu.df"
+```{r}
+rbind(pre.cown, abs.df)->rh.df  
+rh.df1<-rh.df  # a set of data is copied for k-fold cross validation, same raw data yields result in R Markdown
+dim(rh.df)
+dim(rh.df1)
+```
+
+##### Explore data
+```{r}
+str(rh.df)
+names(rh.df)
+rh.df$PA<-as.factor(rh.df$PA)
+#dim(rh.df)
+```
+
+##### Response or target variable is PA (presence/Absence)
+##### Check prevalence
+```{r}
+table(rh.df$PA)               # Count number of "1" and "0"
+table(rh.df$PA)/ nrow(rh.df)  # To check prevalence
+```
+
+##### Split to training and test data set
+```{r}
+set.seed(5555)
+sample.id <- sample (2, nrow (rh.df), replace =TRUE, prob = c(0.7, 0.3)) # Train=70%, test =30%
+rh.train <- rh.df [sample.id == 1, ]
+rh.test <- rh.df [sample.id == 2, ]
+```
+
+##### Training data set
+```{r}
+dim(rh.train)
+table(rh.train$PA)
+```
+
+##### Test data set
+```{r}
+dim(rh.train)
+table(rh.test$PA)
+```
+
+##### Selecting variables
+```{r}
+varTrain<- names(rh.train)
+print(varTrain)
+```
+##### Exclude non-predictor variables
+```{r}
+varTrain <- varTrain [!varTrain %in% c("lat", "long", "species",   "PA")]
+print (varTrain)
+```
+
+##### add "+" sign between predictor variables 
+```{r}
+varTrain1 <- paste(varTrain, collapse = "+")
+print (varTrain1)
+```
+
+##### Add response variables and convert to a formula object
+```{r}
+rf.formula<- as.formula(paste ("PA", varTrain1, sep= "~"))
+print (rf.formula)
+```
+
+##### Load library
+```{r}
+library(randomForest)
+```
+
+##### Run RandomForest with above formula
+```{r}
+rh.rf<- randomForest (rf.formula, data = rh.train, ntree = 1000, importance= TRUE)
+```
+
+##### See model output, confusion matrix and class.error
+```{r}
+print(rh.rf)
+```
+
+##### Plot RF model
+```{r}
+plot(rh.rf)
+```
+
+##### 500 decision trees or a forest has been built using the Random Forest 
+##### algorithm based learning. We can plot the error rate across decision trees. 
+##### The plot seems to indicate that after 200 decision trees, there is not a 
+##### significant reduction in error rate
+
+##### Variable Importance plot
+```{r}
+varImpPlot(rh.rf, sort = TRUE, main = "Variable Importance", n.var=10)
+```
+
+##### Variable Importance Table
+```{r}
+var.imp<- data.frame (importance(rh.rf, type= 2))
+var.imp$Variables <- row.names(var.imp)
+var.imp[order (var.imp$MeanDecreaseGini, decreasing = TRUE), ]
+```
+
+##### To measure the accuracy of the Random Forest model. 
+##### Some of the other model performance statistics are KS, Lift Chart and ROC Curve
+
+##### Predicting response variables
+```{r}
+rh.train$predicted.resp<- predict(rh.rf, rh.train)
+```
+
+##### Confusion matrix
+##### confusionMatrix function from "caret" package can be used for creating 
+##### confusion matrix based on actual response variable and predicted value.
+```{r}
+library(e1071)
+library(caret)
+```
+```{r}
+confusionMatrix(data= rh.train$predicted.resp, reference= rh.train$PA, positive = '1')
+```
+
+##### The "positive" represents true case such as 1 for 1/0, Yes for Yes/No, Ture for T/F
+##### It has accuracy of 99.18%, which is fantastic. 
+##### Now we can predict response for the validation sample and 
+##### calculate model accuracy for the sample.
+
+##### Predicting to test data set
+##### Predicting response variable
+```{r}
+rh.test$predicted.resp<- predict(rh.rf, rh.test, OOB=TRUE, type="response")
+```
+
+##### Create confusion matrix
+```{r}
+confusionMatrix(data=rh.test$predicted.resp, reference = rh.test$PA, positive = '1')
+```
+
+##### Creating performance object
+```{r}
+library(ROCR)
+a.v<-as.vector(rh.rf$votes[,2]) ##### extract predicted '1'
+perf.obj<- prediction( predictions = a.v, labels = rh.train$PA  )
+```
+
+##### Calculate AUC
+```{r}
+rh.AUC <- performance(perf.obj, "auc")
+AUC=rh.AUC@y.values[[1]]
+AUC
+```
+
+##### Plot ROC 
+```{r}
+rh.ROC <- performance(perf.obj, 'tpr', 'fpr')
+plot(rh.ROC, main="ROC Plot", xlab=" 1 - Specificity: False Positive Rate", 
+     ylab="Sensitivity: True Positive Rate")
+abline(a=0,b=1, lty=3)  ##### diagonal line
+```
+
+
+
+#### K-fold Corss Validation in RandomForest ####
+##### To partition the first fold
+```{r}
+k=5
+n= floor(nrow(rh.df1)/k) # n = size of each fold, and value is rounded by "floor" 
+err.vect= rep (NA, k)   # store the error in this vector
+
+i = 1
+s1 = ((i-1) * n+1) # the start of the subset
+s2 = (i*n)         # The end of the subset
+subset = s1:s2     # the range of the subset
+```
+##### Because of round above, the end of the subset may be slightly out of range
+
+##### Sort the data set in random ordering (not 1 and 0 segregated)
+```{r}
+set.seed(42366) ## make reproducible here, but not if generating many random samples
+#rh.df1$PA<-as.numeric(rh.df1$PA)
+dim(rh.df1)
+str(rh.df1)
+rand <- sample(nrow(rh.df1))
+rh.df1<-rh.df1[rand, ]
+head(rh.df1)
+table(rh.df1$PA)
+
+```
+
+#### Split data into training and test for CV
+```{r}
+cv.train= rh.df1[-subset,] # Train the model using this data
+table(cv.train$PA)
+cv.test = rh.df1[subset, ] # test the model's performace on this data
+table(cv.test$PA)
+```
+
+##### Next, move to the second fold:
+###### i = 2
+###### .......
+###### But we automate this by looping
+
+##### Load library
+###### library(randomForest)
+###### library(verification)
+```{r echo=FALSE, include=FALSE}
+library(randomForest)
+```
+
+##### For error test
+```{r echo=FALSE, include=FALSE}
+library(verification)
+```
+
+##### Need to loop over each of the K- folds
+###### The input y-variables must be numeric to calculate the roc.area error, which RF needs in vector
+```{r}
+for (i in 1:k){
+  s1 = ((i-1) * n+1) # the start of the subset
+  s2 = (i*n)         # The end of the subset
+  subset = s1:s2     # the range of the subset
+  
+  cv.train = rh.df1[-subset,] # Train the model using this data
+  cv.test = rh.df1[subset, ] # test the model's performace on this data
+  
+  # run the random forest on the training data set, exclude on predictor variables
+  fit = randomForest (x=cv.train[,-c(1,2,3,32)], y= as.factor (cv.train[,32]))
+  prediction = predict (fit, newdata= cv.test[, -c(1,2,3,32)], type="prob")[,2]
+  
+  # calculate the model's accurancy for the ith fold
+  err.vect[i] <-   roc.area (cv.test[ , 32], prediction)$A
+  # print(paste("AUC for fold", i, ":", err.vect[i]))
+  }
+```
+
+##### Mean error
+```{r}
+print(data.frame(err.vect)) # list of AUCs from k fold
+print(paste("Average AUC:", mean(err.vect)))
+```
+
+##### AUC value add in ROC plot
+```{r}
+rh.ROC <- performance(perf.obj, 'tpr', 'fpr')
+plot(rh.ROC, main="ROC Plot", xlab=" 1 - Specificity: False Positive Rate", 
+     ylab="Sensitivity: True Positive Rate")
+abline(a=0,b=1, lty=3)  # diagonal line
+text(0.8,0.1, labels = paste("Average AUC:",round( mean(err.vect),3)))
+```
+
+
+
+
+
+
+
+
+
+
+
