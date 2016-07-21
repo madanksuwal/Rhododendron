@@ -1,0 +1,209 @@
+---
+title: "Variance Partitioning in GLM and GAM"
+output: html_document
+---     
+
+```{r}
+pre.df<- read.csv("D:/Rhododendron Git/Rhododendron/Data/Rhodo 3 spp presence points2.csv")
+abs.df<- read.csv("D:/Rhododendron Git/Rhododendron/Data/Rhodo sister background point.csv")
+pseu.df<- read.csv("D:/Rhododendron Git/Rhododendron/Data/Random_pseudoabsence_elev_1000_to_5500.csv")
+latt.df<- read.csv("D:/Rhododendron Git/Rhododendron/Data/lattice clip.csv")
+# pre.df = presence of three species  R. lepi, R. lown & R. cown
+# abs.df = pseudo absence, location of other Rhodoendeon species 
+# latt.df = Lattice points (0.008 = 1km resolution) to predict from model,
+# Data set contains all extracted values of BioClim 19 varialbes+
+# geographi variables (DEM, slope, Elev)+ Relative Radiation Index + Growth related varialbes 
+# (Annual BioTemperature, Aridity index, warmth index, coldness indes, and	Ellenberg Quotient)
+```
+     
+These data set lacks Presence/Absence column, i.e. 1/0     
+Add with 1/0 column    
+```{r}
+pre.df$PA<-1
+head(pre.df)
+abs.df$PA<-0
+head(pre.df)
+pseu.df$PA<-0
+head(pseu.df)
+```
+       
+Remove unnecessory column, and make consistent in all data sets    
+```{r}
+#pre.df<-pre.df[, -4]
+abs.df<-abs.df[, -c(1,5, 6, 7)]
+pseu.df<-pseu.df[, -1]
+dim (pre.df)
+names(pre.df)
+dim (abs.df)
+names(abs.df)
+dim(pseu.df)
+names(pseu.df)
+```
+     
+selected variables out of multicollinearity    
+(bio01, bio03, bio04, bio12, bio14, bio15, rri, slope, aspect, and eq) and PA    
+```{r}
+pre1.df <- pre.df[,c("species", "PA", "bio01", "bio03", "bio04", "bio12", 
+                     "bio14", "bio15", "rri", "slope", "aspect", "eq")]
+abs1.df<- abs.df[,c("species","PA", "bio01", "bio03", "bio04", "bio12", 
+                    "bio14", "bio15", "rri", "slope", "aspect", "eq")]
+pseu1.df<- pseu.df[,c("species","PA", "bio01", "bio03", "bio04", "bio12", 
+                      "bio14", "bio15", "rri", "slope", "aspect", "eq")]
+```
+    
+Presence only of species   
+```{r}
+pre.lepi<-subset(pre1.df, species=="lepidotum" )
+pre.lown<-subset(pre1.df, species=="lowndesii" )
+pre.cown<-subset(pre1.df, species=="cowanianum" )
+```
+    
+combining Presence and absence data for each species    
+```{r}
+# Presence and Rhododendron Absence
+Lepi.abs<- rbind(pre.lepi, abs1.df)
+Lown.abs<- rbind(pre.lown, abs1.df)
+Cown.abs<- rbind(pre.cown, abs1.df)
+
+# Presence and Random Pseudo Absence
+Lepi.pse<- rbind(pre.lepi, pseu1.df)
+Lown.pse<- rbind(pre.lown, pseu1.df)
+Cown.pse<- rbind(pre.cown, pseu1.df)
+```
+    
+Load library   
+```{r, include=FALSE}
+library(ecospat)
+```
+    
+### GLM     
+(bio01, bio03, bio04, bio12, bio14, bio15, rri, slope, aspect, and eq)    
+#### R. cowanianum with Rhododendron absence 
+```{r}
+CownA.glm<- glm(PA~ bio04  +bio14+  bio12 + slope , family=binomial, data = Cown.abs)
+summary(CownA.glm)
+(1-CownA.glm$deviance / CownA.glm$null.deviance)
+T3a<-  glm(PA~ bio04 + I(bio04^2) ,  family=binomial, data = Cown.abs)
+(1-T3a$deviance / T3a$null.deviance)
+P3a<-  glm(PA~ bio12  , family=binomial, data = Cown.abs)
+(1-P3a$deviance / P3a$null.deviance)
+ecospat.varpart (T3a, P3a, CownA.glm)
+```
+    
+R. cowanianum with Random Pseudo absence
+```{r}
+CownP.glm<- glm(PA~bio01+I(bio01^2) + bio03 + I(bio03^2)+ bio14, family=binomial, data = Cown.pse)
+summary(CownP.glm)
+(1-CownP.glm$deviance / CownP.glm$null.deviance)
+T3b <- glm(PA~bio01+I(bio01^2) + bio03 + I(bio03^2), family=binomial, data = Cown.pse)
+P3b<- glm(PA~bio14 ,  family=binomial, data = Cown.pse)
+ecospat.varpart (T3b, P3b, CownP.glm)
+```
+      
+#### R. lepidotum with Rhododendron absence
+```{r}
+LepiA.glm<- glm(PA~bio01+ I(bio01^2) + bio03 + I(bio03^2)+  bio15  + rri + aspect, 
+                family= binomial, data=Lepi.abs)
+summary(LepiA.glm)
+(1-LepiA.glm$deviance / LepiA.glm$null.deviance)
+T1a<- glm(PA~bio01+ I(bio01^2) + bio03 + I(bio03^2) , family= binomial, data=Lepi.abs)
+P1a<- glm(PA ~ bio15  ,  family= binomial, data=Lepi.abs)
+ecospat.varpart (T1a, P1a, LepiA.glm)
+```
+    
+R. lepidotum with Random Pseudo absence
+```{r}
+LepiP.glm<- glm(PA ~ bio01 + I (bio01^2)+ bio03 + I (bio03^2)+  
+                  bio15 + bio01:bio15 + bio03:bio15 + bio03:bio12, 
+                family= binomial, data = Lepi.pse)
+summary(LepiP.glm)
+(1-LepiP.glm$deviance / LepiP.glm$null.deviance)
+T1b<- glm(PA ~ bio01 + I (bio01^2)+ bio03 + I (bio03^2) ,family= binomial, data = Lepi.pse)
+P1b<- glm(PA ~bio14+ bio15 + bio12, family= binomial, data = Lepi.pse)
+ecospat.varpart (T1b, P1b, LepiP.glm)
+```
+     
+#### R. lowndesii with Rhododendron absence
+```{r}
+LownA.glm<- glm(PA ~ bio03 + I(bio03^2)+ bio04 + I(bio04^2) + bio14+ I(bio14^2) + aspect, 
+                family=binomial, data=Lown.abs)
+summary(LownA.glm)
+(1-LownA.glm$deviance / LownA.glm$null.deviance)
+T2a<- glm(PA ~ bio03 + I(bio03^2)+ bio04 + I(bio04^2), family=binomial, data=Lown.abs)
+P2a<- glm(PA ~ bio14+ I(bio14^2), family=binomial, data=Lown.abs)
+ecospat.varpart (T2a, P2a, LownA.glm)
+```
+     
+R. lowndesii with Random Pseudo absence    
+```{r}
+LownP.glm<- glm(PA~bio04+I(bio04^2) + bio03+I(bio03^2)+ bio14+ I(bio14^2) + eq + bio04:bio14,
+                family= binomial, data = Lown.pse)
+summary(LownP.glm)
+(1-LownP.glm$deviance / LownP.glm$null.deviance)
+T2b<- glm(PA~bio04+I(bio04^2) + bio03+I(bio03^2) , family= binomial, data = Lown.pse)
+P2b<- glm(PA~bio14+ I(bio14^2),  family= binomial, data = Lown.pse)
+ecospat.varpart (T2b, P2b, LownP.glm)
+```
+
+    
+### GAM 
+```{r, include=FALSE}
+library(mgcv)
+```
+   
+#### R. cowanianum with Rhododendron absence    
+```{r}
+CownA.gam <- gam(PA~  s(bio04) + s(bio12) + s(bio15) +s(aspect),family= binomial, data=Cown.abs)
+summary(CownA.gam)
+T3g<- gam(PA~ +1, family= binomial, data=Cown.abs)
+P3g<- gam(PA~  s(bio12) ,family= binomial, data=Cown.abs)
+summary(P3g)
+ecospat.varpart (T3g, P3g, CownA.gam)
+```
+     
+R. cowanianum with Random Pseudo absence      
+```{r}
+CownP.gam<- gam(PA~ s(bio03)+s(bio12)  + s(bio15),family=binomial, data=Cown.pse)
+summary(CownP.gam)
+T3h<- gam(PA~ s(bio03), family=binomial, data=Cown.pse)
+P3h<- gam(PA~ s(bio12)  + s(bio15),family=binomial, data=Cown.pse)
+ecospat.varpart (T3h, P3h, CownP.gam)
+```
+  
+#### R. lepidotum with Rhododendron absence    
+```{r}
+LepiA.gam <- gam(PA~ s(bio01) + s(bio04)+ s(bio14) + s(bio15) + te(bio01,bio14), family= binomial, data=Lepi.abs)
+summary(LepiA.gam)
+T1g<- gam(PA~ s(bio01) + s(bio04), family= binomial, data=Lepi.abs)
+P1g<- gam(PA~s(bio14) + s(bio15), family= binomial, data=Lepi.abs)
+ecospat.varpart (T1g, P1g, LepiA.gam)
+```
+    
+R. lepidotum with Random pseudo absence    
+```{r}
+LepiP.gam <- gam(PA~ s(bio01) + s(bio04)+ s(bio03) + s(bio12)+ s(bio14) + s(bio15), 
+                 family= binomial, data=Lepi.pse)
+summary(LepiP.gam)
+T1h<-  gam(PA~ s(bio01) + s(bio04)+ s(bio03), family= binomial, data=Lepi.pse)
+P1h<- gam(PA~ s(bio12)+ s(bio14) + s(bio15), family= binomial, data=Lepi.pse)
+ecospat.varpart (T1h, P1h, LepiP.gam)
+```
+   
+#### R. lowndesii with Rhododendron absence   
+```{r}
+LownA.gam<- gam(PA~s(bio14)+ s(bio01)+ s(bio04) + s(bio12), family= binomial, data=Lown.abs)
+summary(LownA.gam)
+T2g<- gam(PA~s(bio03)+ s(bio01)+ s(bio04), family= binomial, data=Lown.abs)
+P2g<-  gam(PA~ s(bio12)+s(bio14), family= binomial, data=Lown.abs)
+ecospat.varpart (T2g, P2g, LownA.gam)
+```
+    
+R. lowndesii with Random pseudo absence    
+```{r}
+LownP.gam<- gam(PA~  s(bio04) + s(bio12) + s(rri), family=binomial, data=Lown.pse)
+summary(LownP.gam)
+T2h<- gam(PA~ s(bio04) , family=binomial, data=Lown.pse)
+P2h<- gam(PA~  s(bio12) , family=binomial, data=Lown.pse)
+ecospat.varpart (T2h, P2h, LownP.gam)
+```
+ 
